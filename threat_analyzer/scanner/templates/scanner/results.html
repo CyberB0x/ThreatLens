@@ -1,0 +1,117 @@
+{% load static %}
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Результаты проверок</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        table td {
+            vertical-align: middle;
+            font-size: 14px;
+        }
+        .truncate {
+            max-width: 250px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .malicious-engines {
+            font-size: 12px;
+            color: #b30000;
+        }
+        td ul {
+            padding-left: 1em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container mt-5">
+    <h2 class="mb-4">🛡️ Результаты проверок</h2>
+    <a href="{% url 'scanner:submit' %}" class="btn btn-primary mb-3">⬆️ Загрузить новый файл/URL</a>
+
+    <form method="get" class="mb-3">
+        <div class="input-group">
+            <input type="text" name="q" placeholder="Поиск по SHA256/IP" class="form-control" value="{{ request.GET.q }}">
+            <button type="submit" class="btn btn-primary">Поиск</button>
+        </div>
+    </form>
+
+    <form method="post" action="{% url 'scanner:clear_results' %}" class="mb-4">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger btn-sm">Очистить все результаты</button>
+    </form>
+
+    <table class="table table-bordered table-striped align-middle">
+        <thead class="table-dark">
+        <tr>
+            <th>Тип</th>
+            <th>Значение</th>
+            <th>SHA256</th>
+            <th>VT</th>
+            <th>YARA</th>
+            <th>Дата</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for scan in submissions %}
+            <tr class="{% if scan.is_malicious or scan.yara_has_error %}table-danger{% endif %}">
+                <td>{{ scan.input_type|upper }}</td>
+                <td class="truncate" title="{{ scan.value }}">{{ scan.value }}</td>
+                <td class="truncate" title="{{ scan.sha256 }}">{{ scan.sha256|default:"—" }}</td>
+                <td>
+                    {% if scan.vt_result %}
+                        {% with stats=scan.vt_result.data.attributes.last_analysis_stats %}
+                            {% if stats.malicious > 0 %}
+                                🛑 {{ stats.malicious }} зловредов<br>
+                                <div class="malicious-engines">
+                                    {% for engine, result in scan.vt_result.data.attributes.last_analysis_results.items %}
+                                        {% if result.category == "malicious" %}
+                                            {{ engine }}{% if not forloop.last %}, {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                ✅ Чисто
+                            {% endif %}
+                        {% endwith %}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td class="truncate" title="{{ scan.yara_result }}">
+                    {% if scan.yara_result %}
+                        {% if scan.yara_result|typeof == "list" %}
+                            <ul class="mb-0 ps-3">
+                                {% for rule in scan.yara_result %}
+                                    <li>{{ rule }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% elif scan.yara_result|typeof == "dict" %}
+                            <pre>{{ scan.yara_result }}</pre>
+                        {% else %}
+                            {{ scan.yara_result }}
+                        {% endif %}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ scan.created_at|date:"d.m.Y H:i" }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted">Нет данных</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
